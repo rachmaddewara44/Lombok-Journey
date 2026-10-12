@@ -1,0 +1,664 @@
+   <!DOCTYPE html>
+<html lang="id">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Lombok Journey — WebGIS Pariwisata</title>
+  <meta name="description" content="Prototipe WebGIS pariwisata Lombok dengan peta destinasi, itinerary, routing, wallet, dan jurnal perjalanan." />
+  <link rel="preconnect" href="https://unpkg.com" />
+  <link rel="preconnect" href="https://tile.openstreetmap.org" />
+  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" integrity="sha256-p4NxAoJBhIIN+hmNHrzRCf9tD/miZyoHS5obTRR9BMY=" crossorigin="" />
+  <style>
+    :root {
+      --ink: #192b28;
+      --muted: #73807a;
+      --paper: #f5f4ef;
+      --card: #fffefa;
+      --line: #e5e6dc;
+      --green: #214e43;
+      --green-2: #2f6c59;
+      --lime: #d5e6a2;
+      --orange: #e58b5a;
+      --sand: #e9dcc4;
+      --shadow: 0 14px 38px rgba(27, 50, 43, .07);
+      --radius: 20px;
+    }
+    * { box-sizing: border-box; }
+    body { margin: 0; background: var(--paper); color: var(--ink); font-family: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; }
+    button, input, select, textarea { font: inherit; }
+    button { cursor: pointer; }
+    .app { min-height: 100vh; display: grid; grid-template-columns: 238px minmax(0, 1fr); }
+    .sidebar { padding: 26px 17px; background: var(--green); color: #f6f4eb; display: flex; flex-direction: column; gap: 30px; }
+    .brand { display: flex; align-items: center; gap: 11px; padding: 0 8px; }
+    .brand-mark { width: 43px; height: 43px; border-radius: 15px; background: var(--lime); color: var(--green); display: grid; place-items: center; font-size: 23px; font-weight: 900; transform: rotate(-4deg); }
+    .brand h1 { margin: 0; font-size: 16px; letter-spacing: -.4px; }
+    .brand p { margin: 3px 0 0; color: #c3d5cb; font-size: 11px; }
+    .nav-label { color: #9ab6a8; text-transform: uppercase; letter-spacing: 1.5px; font-size: 10px; font-weight: 800; padding: 0 12px; margin-bottom: 9px; }
+    .nav { display: grid; gap: 6px; }
+    .nav-btn { border: 0; border-radius: 13px; background: transparent; color: #d7e4dc; display: flex; align-items: center; gap: 13px; padding: 13px 14px; width: 100%; text-align: left; font-size: 13px; font-weight: 650; transition: .2s; }
+    .nav-btn .nav-icon { width: 21px; text-align: center; font-size: 17px; }
+    .nav-btn:hover, .nav-btn.active { background: #ffffff19; color: white; }
+    .nav-btn.active { box-shadow: inset 3px 0 var(--lime); }
+    .side-bottom { margin-top: auto; padding: 16px 14px; border: 1px solid #ffffff24; border-radius: 17px; background: #ffffff0b; }
+    .side-bottom .mini-label { color: var(--lime); font-size: 10px; text-transform: uppercase; letter-spacing: 1.1px; font-weight: 800; }
+    .side-bottom p { color: #d1dfd6; font-size: 12px; line-height: 1.6; margin: 8px 0 0; }
+    .main { min-width: 0; padding: 25px clamp(18px, 3vw, 42px) 40px; }
+    .topbar { display: flex; align-items: center; justify-content: space-between; gap: 15px; margin-bottom: 28px; }
+    .crumb { font-size: 12px; color: var(--muted); }
+    .crumb strong { color: var(--ink); }
+    .top-actions { display: flex; align-items: center; gap: 10px; }
+    .search-wrap { position: relative; }
+    .search-wrap span { position: absolute; top: 10px; left: 12px; color: #87928a; }
+    .search-wrap input { width: 245px; border: 1px solid var(--line); outline: none; background: var(--card); padding: 10px 13px 10px 36px; border-radius: 12px; font-size: 12px; }
+    .search-wrap input:focus { border-color: #8cae9d; box-shadow: 0 0 0 3px #dce8df; }
+    .avatar { width: 38px; height: 38px; border-radius: 13px; background: var(--sand); display: grid; place-items: center; color: var(--green); font-weight: 850; font-size: 12px; }
+    .page { display: none; animation: fade .24s ease; }
+    .page.active { display: block; }
+    @keyframes fade { from { opacity: .5; transform: translateY(4px); } to { opacity: 1; transform: translateY(0); } }
+    .eyebrow { font-size: 10px; color: var(--green-2); font-weight: 850; letter-spacing: 1.8px; text-transform: uppercase; }
+    .hero { display: flex; justify-content: space-between; align-items: flex-end; gap: 22px; margin-bottom: 24px; }
+    h2 { font-size: clamp(26px, 3vw, 38px); line-height: 1.1; letter-spacing: -1.6px; margin: 9px 0 10px; font-weight: 800; }
+    .hero p, .page-subtitle { color: var(--muted); font-size: 13px; line-height: 1.7; max-width: 640px; margin: 0; }
+    .hero-stamp { flex: 0 0 auto; min-width: 134px; padding: 14px 17px; border-radius: 17px; background: var(--lime); color: var(--green); }
+    .hero-stamp small { display: block; font-size: 10px; text-transform: uppercase; letter-spacing: 1px; font-weight: 800; }
+    .hero-stamp strong { font-size: 24px; letter-spacing: -1px; display: block; margin-top: 5px; }
+    .stat-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 13px; margin-bottom: 22px; }
+    .stat-card { border: 1px solid var(--line); border-radius: 17px; background: var(--card); padding: 17px 18px; display: flex; align-items: center; gap: 13px; }
+    .stat-icon { width: 40px; height: 40px; display: grid; place-items: center; background: #edf1df; border-radius: 13px; font-size: 18px; }
+    .stat-card:nth-child(2) .stat-icon { background: #f8e8d7; }
+    .stat-card:nth-child(3) .stat-icon { background: #e2edeb; }
+    .stat-card span { display: block; color: var(--muted); font-size: 11px; margin-bottom: 5px; }
+    .stat-card strong { font-size: 20px; letter-spacing: -.7px; }
+    .section-head { display: flex; justify-content: space-between; align-items: center; gap: 12px; margin-bottom: 13px; }
+    .section-head h3 { margin: 0; font-size: 16px; letter-spacing: -.4px; }
+    .section-head p { margin: 4px 0 0; color: var(--muted); font-size: 11px; }
+    .text-btn { background: transparent; border: 0; color: var(--green-2); font-size: 12px; font-weight: 800; padding: 8px 2px; }
+    .explore-layout { display: grid; grid-template-columns: minmax(0, 1.42fr) minmax(290px, .85fr); gap: 18px; align-items: start; }
+    .panel { min-width: 0; background: var(--card); border: 1px solid var(--line); border-radius: var(--radius); box-shadow: var(--shadow); overflow: hidden; }
+    .panel-head { padding: 17px 19px 14px; display: flex; align-items: center; justify-content: space-between; gap: 12px; }
+    .panel-title { font-size: 13px; font-weight: 800; }
+    .panel-kicker { font-size: 10px; color: var(--muted); margin-top: 4px; }
+    .map-badge { border-radius: 99px; padding: 7px 10px; color: var(--green-2); background: #edf3e5; font-size: 10px; font-weight: 800; white-space: nowrap; }
+    #map, #itineraryMap { height: 495px; width: 100%; background: #e8eee6; z-index: 1; }
+    .map-legend { display: flex; gap: 11px; flex-wrap: wrap; padding: 13px 18px 16px; font-size: 10px; color: var(--muted); }
+    .legend-item { display: inline-flex; align-items: center; gap: 6px; }
+    .legend-dot { width: 8px; height: 8px; border-radius: 50%; }
+    .filters { display: flex; gap: 6px; flex-wrap: wrap; padding: 0 17px 13px; }
+    .chip { border: 1px solid var(--line); background: #fff; border-radius: 99px; padding: 7px 10px; font-size: 10px; color: #626f67; font-weight: 750; }
+    .chip.active { border-color: var(--green); color: white; background: var(--green); }
+    .dest-list { padding: 0 12px 12px; max-height: 520px; overflow: auto; }
+    .dest-card { padding: 12px 10px; display: grid; grid-template-columns: 45px minmax(0, 1fr) auto; align-items: center; gap: 11px; border-radius: 14px; transition: .15s; }
+    .dest-card + .dest-card { border-top: 1px solid #f0f0e9; }
+    .dest-card:hover { background: #f6f7ef; }
+    .dest-emoji { width: 44px; height: 44px; display: grid; place-items: center; border-radius: 13px; background: #e6eee4; font-size: 21px; }
+    .dest-card:nth-child(3n) .dest-emoji { background: #f8eadc; }
+    .dest-card:nth-child(3n+2) .dest-emoji { background: #e5e9f0; }
+    .dest-name { font-size: 12px; font-weight: 850; margin-bottom: 4px; }
+    .dest-meta { font-size: 10px; color: var(--muted); line-height: 1.5; }
+    .dest-action { display: grid; gap: 5px; justify-items: end; }
+    .mini-add { background: var(--green); color: white; border: 0; border-radius: 9px; width: 31px; height: 31px; font-size: 18px; line-height: 1; }
+    .mini-map { border: 0; background: transparent; color: var(--green-2); font-size: 10px; font-weight: 800; padding: 4px; }
+    .empty { padding: 25px 15px; color: var(--muted); text-align: center; font-size: 12px; }
+    .page-title-row { margin-bottom: 23px; display: flex; justify-content: space-between; align-items: flex-end; gap: 20px; }
+    .page-title-row h2 { font-size: 31px; margin-bottom: 7px; }
+    .btn { border: 0; border-radius: 12px; background: var(--green); color: white; padding: 11px 15px; font-size: 12px; font-weight: 800; transition: .18s; }
+    .btn:hover { background: #2c6354; transform: translateY(-1px); }
+    .btn.secondary { background: #e8eee3; color: var(--green); }
+    .btn.secondary:hover { background: #dce7d7; }
+    .btn.ghost { background: transparent; border: 1px solid var(--line); color: var(--ink); }
+    .btn.danger { background: #f8e8e1; color: #9d4c31; }
+    .form-row { display: flex; flex-wrap: wrap; gap: 10px; align-items: end; }
+    .field { display: grid; gap: 6px; min-width: 130px; flex: 1; }
+    .field label { font-size: 10px; color: var(--muted); font-weight: 800; text-transform: uppercase; letter-spacing: .6px; }
+    .field input, .field select, .field textarea { width: 100%; padding: 11px 12px; border: 1px solid var(--line); border-radius: 11px; outline: 0; background: white; color: var(--ink); font-size: 12px; }
+    .field input:focus, .field select:focus, .field textarea:focus { border-color: #96b4a2; box-shadow: 0 0 0 3px #e5ede6; }
+    .planner-settings { padding: 18px; margin-bottom: 18px; }
+    .planner-layout { display: grid; grid-template-columns: minmax(0, .86fr) minmax(0, 1.14fr); gap: 18px; align-items: start; }
+    .itinerary-items { padding: 0 18px 17px; }
+    .itinerary-item { display: grid; grid-template-columns: 34px minmax(0, 1fr) auto; gap: 11px; align-items: center; padding: 14px 0; border-bottom: 1px solid #eef0e8; }
+    .itinerary-item:last-child { border-bottom: 0; }
+    .step-number { width: 31px; height: 31px; display: grid; place-items: center; border-radius: 11px; background: #e7eee4; color: var(--green); font-size: 11px; font-weight: 900; }
+    .itinerary-item strong { display: block; font-size: 12px; margin-bottom: 4px; }
+    .itinerary-item small { color: var(--muted); font-size: 10px; line-height: 1.5; }
+    .item-tools { display: flex; gap: 4px; }
+    .icon-btn { width: 27px; height: 27px; border: 1px solid var(--line); background: white; border-radius: 8px; color: var(--muted); font-size: 12px; }
+    .route-summary { margin: 0 18px 18px; padding: 14px; border-radius: 14px; background: #f0f3e8; display: grid; grid-template-columns: repeat(2, 1fr); gap: 10px; }
+    .route-summary span { display: block; font-size: 10px; color: var(--muted); margin-bottom: 4px; }
+    .route-summary strong { font-size: 16px; }
+    .notice { margin: 13px 18px 18px; font-size: 10px; color: var(--muted); line-height: 1.6; }
+    .wallet-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; margin-bottom: 18px; }
+    .balance-card { background: var(--green); color: white; padding: 24px; border-radius: var(--radius); min-height: 170px; position: relative; overflow: hidden; }
+    .balance-card:after { content: ""; position: absolute; width: 180px; height: 180px; border: 1px solid #ffffff26; border-radius: 50%; right: -46px; top: 27px; box-shadow: 0 0 0 22px #ffffff07, 0 0 0 47px #ffffff05; }
+    .balance-card span { display: block; color: #c4d6cc; font-size: 11px; }
+    .balance-card strong { display: block; font-size: 31px; letter-spacing: -1px; margin: 12px 0 20px; }
+    .balance-card small { font-size: 10px; color: #c4d6cc; }
+    .mini-stats { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+    .mini-stat { padding: 19px; background: var(--card); border: 1px solid var(--line); border-radius: var(--radius); }
+    .mini-stat span { display: block; color: var(--muted); font-size: 11px; margin-bottom: 11px; }
+    .mini-stat strong { font-size: 22px; letter-spacing: -.7px; }
+    .mini-stat.income strong { color: #2e8063; }
+    .mini-stat.expense strong { color: #b96541; }
+    .split-panels { display: grid; grid-template-columns: minmax(280px, .8fr) minmax(0, 1.2fr); gap: 18px; align-items: start; }
+    .form-panel { padding: 19px; }
+    .form-panel h3 { margin: 0 0 16px; font-size: 15px; }
+    .stack { display: grid; gap: 12px; }
+    .transactions { padding: 0 18px 16px; }
+    .transaction { display: flex; justify-content: space-between; gap: 15px; align-items: center; padding: 14px 0; border-bottom: 1px solid #eef0e8; }
+    .transaction:last-child { border-bottom: 0; }
+    .transaction-left { display: flex; align-items: center; gap: 11px; }
+    .transaction-icon { width: 36px; height: 36px; display: grid; place-items: center; border-radius: 12px; background: #f7e9dc; }
+    .transaction strong { display: block; font-size: 12px; margin-bottom: 4px; }
+    .transaction small { font-size: 10px; color: var(--muted); }
+    .amount { font-size: 12px; font-weight: 850; white-space: nowrap; }
+    .amount.positive { color: #2e8063; }
+    .amount.negative { color: #ba5d3e; }
+    .journal-layout { display: grid; grid-template-columns: minmax(280px, .8fr) minmax(0, 1.2fr); gap: 18px; align-items: start; }
+    .journal-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 13px; padding: 15px; }
+    .journal-card { padding: 17px; background: #f8f4e9; border-radius: 15px; min-height: 160px; position: relative; }
+    .journal-card:nth-child(3n+2) { background: #e9f0e8; }
+    .journal-card:nth-child(3n) { background: #f9e9dc; }
+    .journal-card .journal-date { color: #6d7d71; font-size: 10px; font-weight: 800; }
+    .journal-card h4 { margin: 10px 0 7px; font-size: 14px; }
+    .journal-card p { margin: 0; font-size: 11px; line-height: 1.7; color: #637068; white-space: pre-wrap; overflow-wrap: anywhere; }
+    .journal-delete { position: absolute; top: 10px; right: 10px; border: 0; background: #ffffffa0; border-radius: 7px; color: #788178; width: 24px; height: 24px; }
+    .toast { position: fixed; right: 22px; bottom: 22px; background: var(--ink); color: white; padding: 13px 17px; border-radius: 13px; font-size: 12px; z-index: 9999; box-shadow: var(--shadow); opacity: 0; transform: translateY(10px); pointer-events: none; transition: .2s; max-width: min(390px, calc(100vw - 40px)); }
+    .toast.show { opacity: 1; transform: translateY(0); }
+    .leaflet-popup-content-wrapper { border-radius: 12px; }
+    .popup-title { font-size: 13px; font-weight: 850; margin-bottom: 4px; }
+    .popup-sub { font-size: 10px; color: #718078; margin-bottom: 9px; }
+    .popup-btn { border: 0; background: var(--green); color: white; border-radius: 8px; padding: 7px 10px; font-size: 10px; font-weight: 800; }
+    footer { color: #929a92; font-size: 10px; line-height: 1.6; margin-top: 28px; }
+    @media (max-width: 1120px) {
+      .app { grid-template-columns: 205px minmax(0, 1fr); }
+      .explore-layout { grid-template-columns: minmax(0, 1fr); }
+      .dest-list { max-height: none; display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); }
+      .dest-card + .dest-card { border-top: 0; }
+      .dest-card { border-bottom: 1px solid #f0f0e9; }
+    }
+    @media (max-width: 800px) {
+      .app { display: block; }
+      .sidebar { padding: 13px 14px; position: sticky; top: 0; z-index: 900; display: block; box-shadow: 0 4px 15px #172c271f; }
+      .brand { padding: 0 2px 12px; }
+      .brand-mark { width: 35px; height: 35px; border-radius: 12px; }
+      .nav-label, .side-bottom { display: none; }
+      .nav { grid-template-columns: repeat(4, 1fr); gap: 4px; }
+      .nav-btn { padding: 9px 4px; flex-direction: column; gap: 3px; font-size: 10px; border-radius: 10px; }
+      .nav-btn.active { box-shadow: inset 0 -3px var(--lime); }
+      .nav-btn .nav-icon { font-size: 16px; }
+      .main { padding: 18px 14px 28px; }
+      .topbar { margin-bottom: 20px; }
+      .search-wrap input { width: min(44vw, 220px); }
+      .hero { align-items: flex-start; }
+      .hero-stamp { display: none; }
+      .stat-grid { gap: 7px; }
+      .stat-card { padding: 12px 9px; gap: 7px; }
+      .stat-icon { display: none; }
+      .stat-card strong { font-size: 17px; }
+      .planner-layout, .split-panels, .journal-layout { grid-template-columns: 1fr; }
+      .wallet-grid { grid-template-columns: 1fr; }
+      .dest-list { grid-template-columns: 1fr; }
+      #map, #itineraryMap { height: 390px; }
+      .page-title-row { align-items: flex-start; flex-direction: column; }
+    }
+    @media (max-width: 460px) {
+      .crumb { display: none; }
+      .search-wrap input { width: 57vw; }
+      .avatar { width: 35px; height: 35px; }
+      h2 { font-size: 29px; }
+      .stat-card { display: block; }
+      .stat-card span { font-size: 9px; }
+      .stat-card strong { font-size: 16px; }
+      .form-row { display: grid; grid-template-columns: 1fr; }
+      .page-title-row h2 { font-size: 28px; }
+    }
+  </style>
+</head>
+<body>
+  <div class="app">
+    <aside class="sidebar">
+      <div class="brand">
+        <div class="brand-mark">L</div>
+        <div><h1>Lombok Journey</h1><p>Explore the island, your way.</p></div>
+      </div>
+      <div>
+        <div class="nav-label">Workspace</div>
+        <nav class="nav" aria-label="Navigasi utama">
+          <button class="nav-btn active" data-page="explore"><span class="nav-icon">⌖</span><span>Explore</span></button>
+          <button class="nav-btn" data-page="itinerary"><span class="nav-icon">↗</span><span>Itinerary</span></button>
+          <button class="nav-btn" data-page="wallet"><span class="nav-icon">◈</span><span>Wallet</span></button>
+          <button class="nav-btn" data-page="journal"><span class="nav-icon">▤</span><span>Journal</span></button>
+        </nav>
+      </div>
+      <div class="side-bottom">
+        <div class="mini-label">Travel note</div>
+        <p>Temukan destinasi, susun rute, dan simpan cerita perjalananmu dalam satu tempat.</p>
+      </div>
+    </aside>
+
+    <main class="main">
+      <header class="topbar">
+        <div class="crumb">Workspace / <strong id="breadcrumb">Explore Lombok</strong></div>
+        <div class="top-actions">
+          <div class="search-wrap"><span>⌕</span><input id="globalSearch" type="search" placeholder="Cari destinasi..." aria-label="Cari destinasi" /></div>
+          <div class="avatar" title="pengguna">LJ</div>
+        </div>
+      </header>
+
+      <section id="page-explore" class="page active">
+        <div class="hero">
+          <div><div class="eyebrow">A little island, a lot to discover</div><h2>Temukan sisi lain<br />Pulau Lombok.</h2><p>Jelajahi destinasi, pahami jarak antarlokasi, dan rencanakan perjalananmu dari satu peta interaktif.</p></div>
+          <div class="hero-stamp"><small>GeoJSON database</small><strong id="heroCount">0 places</strong></div>
+        </div>
+        <div class="stat-grid">
+          <div class="stat-card"><div class="stat-icon">⌖</div><div><span>Destinasi</span><strong id="statDestinations">0</strong></div></div>
+          <div class="stat-card"><div class="stat-icon">◉</div><div><span>Destinasi itinerary</span><strong id="statItinerary">0</strong></div></div>
+          <div class="stat-card"><div class="stat-icon">↗</div><div><span>Kategori wisata</span><strong>4 kategori</strong></div></div>
+        </div>
+        <div class="section-head"><div><h3>Jelajahi destinasi</h3><p>Pilih titik pada peta atau tambahkan ke rencana perjalanan.</p></div><button class="text-btn" data-goto="itinerary">Buka itinerary ↗</button></div>
+        <div class="explore-layout">
+          <div class="panel">
+            <div class="panel-head"><div><div class="panel-title">Peta wisata Lombok</div><div class="panel-kicker">Titik destinasi dari file GeoJSON</div></div><span class="map-badge">● Interactive map</span></div>
+            <div id="map" role="application" aria-label="Peta interaktif destinasi wisata Lombok"></div>
+            <div class="map-legend"><span class="legend-item"><i class="legend-dot" style="background:#df875b"></i>Pantai</span><span class="legend-item"><i class="legend-dot" style="background:#4c8b66"></i>Alam</span><span class="legend-item"><i class="legend-dot" style="background:#8c79b6"></i>Budaya</span><span class="legend-item"><i class="legend-dot" style="background:#548baf"></i>Buatan</span></div>
+          </div>
+          <div class="panel">
+            <div class="panel-head"><div><div class="panel-title">Destinasi pilihan</div><div class="panel-kicker" id="destCountLabel">0 lokasi ditampilkan</div></div><span class="map-badge">Explore</span></div>
+            <div class="filters" id="categoryFilters"><button class="chip active" data-category="Semua">Semua</button><button class="chip" data-category="Pantai">Pantai</button><button class="chip" data-category="Alam">Alam</button><button class="chip" data-category="Budaya">Budaya</button><button class="chip" data-category="Buatan">Buatan</button></div>
+            <div class="dest-list" id="destinationList"></div>
+          </div>
+        </div>
+        <footer>Prototipe WebGIS Smart Tourism Lombok.rachmaddewara E100210184. Peta © OpenStreetMap contributors.</footer>
+      </section>
+
+      <section id="page-itinerary" class="page">
+        <div class="page-title-row"><div><div class="eyebrow">Plan it, then go</div><h2>Rencana perjalanan.</h2><p class="page-subtitle">Susun destinasi secara berurutan, buat rekomendasi sederhana, lalu tampilkan rute jalan pada peta.</p></div><button class="btn secondary" id="clearItinerary">Bersihkan rencana</button></div>
+        <div class="panel planner-settings">
+          <div class="section-head"><div><h3>Pengaturan perjalanan</h3><p>.</p></div><span class="map-badge"></span></div>
+          <div class="form-row">
+            <div class="field"><label for="startPoint">Titik awal</label><select id="startPoint"><option value="airport">Bandara Internasional Lombok</option><option value="mataram">Kota Mataram</option><option value="lembar">Pelabuhan Lembar</option></select></div>
+            <div class="field"><label for="planCategory">Kategori</label><select id="planCategory"><option value="Semua">Semua kategori</option><option value="Pantai">Pantai</option><option value="Alam">Alam</option><option value="Budaya">Budaya</option><option value="Buatan">Buatan</option></select></div>
+            <div class="field"><label for="dayHours">Durasi (jam)</label><select id="dayHours"><option value="6">6 jam</option><option value="8">8 jam</option><option value="10" selected>10 jam</option><option value="12">12 jam</option></select></div>
+            <button class="btn" id="generatePlan">Buat rekomendasi ↗</button>
+          </div>
+        </div>
+        <div class="planner-layout">
+          <div class="panel">
+            <div class="panel-head"><div><div class="panel-title">Itinerary kamu</div><div class="panel-kicker" id="itineraryCountLabel">Belum ada destinasi</div></div><span class="map-badge" id="planDayBadge">DAY 01</span></div>
+            <div class="itinerary-items" id="itineraryList"></div>
+            <div class="route-summary"><div><span>Total jarak rute</span><strong id="routeDistance">—</strong></div><div><span>Waktu berkendara</span><strong id="routeDuration">—</strong></div></div>
+            <div style="padding:0 18px 18px;display:flex;gap:8px;flex-wrap:wrap"><button class="btn" id="calculateRoute">Hitung & tampilkan rute</button><button class="btn secondary" id="exportItinerary"></button></div>
+           
+          </div>
+          <div class="panel"><div class="panel-head"><div><div class="panel-title">Rute perjalanan</div><div class="panel-kicker">Garis rute akan muncul setelah dihitung.</div></div><span class="map-badge">Road routing</span></div><div id="itineraryMap" role="application" aria-label="Peta rute itinerary"></div><div class="map-legend"><span class="legend-item"><i class="legend-dot" style="background:#214e43"></i>Urutan destinasi</span><span class="legend-item"><i class="legend-dot" style="background:#e58b5a"></i>Rute jalan</span></div></div>
+        </div>
+        <footer>.</footer>
+      </section>
+
+      <section id="page-wallet" class="page">
+        <div class="page-title-row"><div><div class="eyebrow">Keep your trip on track</div><h2>Wallet perjalanan.</h2><p class="page-subtitle">Catat anggaran dan transaksi selama menjelajahi Lombok. Data disimpan pada browser perangkat ini.</p></div></div>
+        <div class="wallet-grid">
+          <div class="balance-card"><span>Saldo perjalanan</span><strong id="walletBalance">Rp0</strong><small>Saldo · tersimpan secara lokal</small></div>
+          <div class="mini-stats"><div class="mini-stat income"><span>Total pemasukan</span><strong id="walletIncome">Rp0</strong></div><div class="mini-stat expense"><span>Total pengeluaran</span><strong id="walletExpense">Rp0</strong></div></div>
+        </div>
+        <div class="split-panels">
+          <div class="panel form-panel"><h3>Tambah transaksi</h3><form id="transactionForm" class="stack"><div class="field"><label for="transactionType">Jenis transaksi</label><select id="transactionType"><option value="expense">Pengeluaran</option><option value="income">Pemasukan / tambah saldo</option></select></div><div class="field"><label for="transactionTitle">Keterangan</label><input id="transactionTitle" placeholder="Contoh: tiket masuk pantai" required maxlength="70" /></div><div class="field"><label for="transactionAmount">Nominal (Rp)</label><input id="transactionAmount" type="number" min="1" step="1000" placeholder="50000" required /></div><button class="btn" type="submit">Simpan transaksi</button></form></div>
+          <div class="panel"><div class="panel-head"><div><div class="panel-title">Riwayat transaksi</div><div class="panel-kicker">Pemasukan dan pengeluaran perjalanan</div></div><span class="map-badge" id="transactionCount">0 transaksi</span></div><div class="transactions" id="transactionList"></div></div>
+        </div>
+        <footer>Catatan: wallet ini hanya pencatatan lokal dalam browser, bukan rekening atau layanan pembayaran.</footer>
+      </section>
+
+      <section id="page-journal" class="page">
+        <div class="page-title-row"><div><div class="eyebrow">Collect the little moments</div><h2>Jurnal perjalanan.</h2><p class="page-subtitle">Simpan cerita, catatan singkat, dan pengalamanmu selama di Lombok.</p></div></div>
+        <div class="journal-layout">
+          <div class="panel form-panel"><h3>Tulis catatan baru</h3><form id="journalForm" class="stack"><div class="field"><label for="journalDate">Tanggal</label><input id="journalDate" type="date" required /></div><div class="field"><label for="journalTitle">Judul cerita</label><input id="journalTitle" placeholder="Contoh: Senja di Tanjung Aan" maxlength="80" required /></div><div class="field"><label for="journalBody">Ceritamu</label><textarea id="journalBody" rows="6" placeholder="Apa yang kamu lihat, rasakan, atau ingin ingat?" maxlength="1500" required></textarea></div><button class="btn" type="submit">Simpan jurnal</button></form></div>
+          <div class="panel"><div class="panel-head"><div><div class="panel-title">Catatan tersimpan</div><div class="panel-kicker">Kumpulan momen perjalananmu</div></div><span class="map-badge" id="journalCount">0 catatan</span></div><div class="journal-grid" id="journalList"></div></div>
+        </div>
+        <footer>Catatan jurnal hanya disimpan pada local storage browser ini. Ekspor/cadangkan catatan sebelum membersihkan data browser.</footer>
+      </section>
+    </main>
+  </div>
+  <div class="toast" id="toast" role="status" aria-live="polite"></div>
+  <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js" integrity="sha256-20nQCchB9co0qIjJZRGuk2/Z9VM+kNiyxNV1lvTlZBo=" crossorigin=""></script>
+  <script>
+    // Data destinasi dimuat secara dinamis dari GeoJSON
+    let destinations = [];
+    const startPoints = {
+      airport: {id:'airport', name:'Bandara Internasional Lombok', lat:-8.7570, lon:116.2760},
+      mataram: {id:'mataram', name:'Kota Mataram', lat:-8.5830, lon:116.1160},
+      lembar: {id:'lembar', name:'Pelabuhan Lembar', lat:-8.7300, lon:116.0750}
+    };
+    const categoryColors = {Pantai:'#df875b', Alam:'#4c8b66', Budaya:'#8c79b6', Buatan:'#548baf'};
+    const $ = (selector) => document.querySelector(selector);
+    const $$ = (selector) => [...document.querySelectorAll(selector)];
+    const loadJSON = (key, fallback) => { try { const value = localStorage.getItem(key); return value ? JSON.parse(value) : fallback; } catch { return fallback; } };
+    let state = {
+      page: 'explore', filter: 'Semua', search: '', itinerary: loadJSON('lj_itinerary', []),
+      transactions: loadJSON('lj_transactions', []), journals: loadJSON('lj_journals', []),
+      routeMetrics: null
+    };
+    let map, itineraryMap, markerLayer, itineraryMarkerLayer, routeLayer;
+    let toastTimer;
+
+    function persist() {
+      localStorage.setItem('lj_itinerary', JSON.stringify(state.itinerary));
+      localStorage.setItem('lj_transactions', JSON.stringify(state.transactions));
+      localStorage.setItem('lj_journals', JSON.stringify(state.journals));
+    }
+    function toast(message) {
+      const node = $('#toast'); node.textContent = message; node.classList.add('show');
+      clearTimeout(toastTimer); toastTimer = setTimeout(() => node.classList.remove('show'), 2800);
+    }
+    function rupiah(value) { return new Intl.NumberFormat('id-ID', {style:'currency', currency:'IDR', maximumFractionDigits:0}).format(value || 0); }
+    function escapeHTML(value) { return String(value).replace(/[&<>"']/g, ch => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#039;'}[ch])); }
+    function destinationById(id) { return destinations.find(d => String(d.id) === String(id)); }
+    
+    function showPage(page) {
+      state.page = page;
+      $$('.page').forEach(section => section.classList.toggle('active', section.id === `page-${page}`));
+      $$('.nav-btn').forEach(button => button.classList.toggle('active', button.dataset.page === page));
+      const names = {explore:'Explore Lombok', itinerary:'Itinerary planner', wallet:'Travel wallet', journal:'Travel journal'};
+      $('#breadcrumb').textContent = names[page] || 'Lombok Journey';
+      if (page === 'explore' && map) setTimeout(() => map.invalidateSize(), 80);
+      if (page === 'itinerary' && itineraryMap) setTimeout(() => itineraryMap.invalidateSize(), 80);
+    }
+    
+    function focusDestination(id) {
+      const d = destinationById(id); if (!d || !map) return;
+      showPage('explore');
+      $('#globalSearch').value = '';
+      state.search = ''; state.filter = 'Semua'; renderDestinations(); setCategoryFilterButtons();
+      setTimeout(() => { map.setView([d.lat, d.lon], 12); const marker = markerLayer.getLayers().find(layer => layer.options.destinationId === String(id)); if (marker) marker.openPopup(); }, 100);
+    }
+
+    // Fungsi untuk menarik data GeoJSON eksternal
+    async function loadGeoJSONDestinations() {
+      try {
+        const response = await fetch('destinasi_lombok.geojson');
+        if (!response.ok) throw new Error('Gagal mengambil file GeoJSON');
+        const geojson = await response.json();
+
+        destinations = geojson.features.map(feat => {
+          const props = feat.properties || {};
+          const coords = feat.geometry && feat.geometry.coordinates ? feat.geometry.coordinates : [0, 0];
+          
+          let emojiMap = { 'pantai': '🏖️', 'alam': '⛰️', 'budaya': '🏡', 'buatan': '🌳' };
+          let kat = (props.Kategori || 'Alam').toLowerCase();
+
+          return {
+            id: String(props.OBJECTID || Math.random()),
+            name: props.Nama || 'Tanpa Nama',
+            category: props.Kategori ? props.Kategori.charAt(0).toUpperCase() + props.Kategori.slice(1) : 'Alam',
+            district: props.Kabupaten || 'Lombok',
+            lon: coords[0],
+            lat: coords[1],
+            emoji: emojiMap[kat] || '📍',
+            duration: 90,
+            desc: `Destinasi di wilayah ${props.Kabupaten || 'Lombok'}.`,
+            facilities: ['Area parkir']
+          };
+        });
+
+        initMaps();
+        renderDestinations();
+        renderItinerary();
+      } catch (error) {
+        console.error(error);
+        toast('Gagal memuat file GeoJSON destinasi. Pastikan file berada di folder yang sama.');
+      }
+    }
+
+    function initMaps() {
+      if (!window.L) { toast('Peta tidak dapat dimuat. Periksa koneksi internet.'); return; }
+      
+      // 1. Base Maps
+      const osm = L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {maxZoom:19, attribution:'&copy; OpenStreetMap contributors'});
+      
+      map = L.map('map', {scrollWheelZoom:false, layers: [osm]}).setView([-8.62, 116.28], 9);
+      markerLayer = L.layerGroup().addTo(map);
+
+      // 2. Fetch data destinasi titik
+      destinations.forEach(d => {
+        const marker = L.circleMarker([d.lat, d.lon], {radius:7, color:'#fffefa', weight:2, fillColor:categoryColors[d.category] || '#4c8b66', fillOpacity:1});
+        marker.options.destinationId = String(d.id);
+        marker.bindPopup(`<div class="popup-title">${escapeHTML(d.name)}</div><div class="popup-sub">${escapeHTML(d.category)} · ${escapeHTML(d.district)}</div><button class="popup-btn" onclick="window.addToItinerary('${d.id}')">+ Tambahkan ke itinerary</button>`);
+        marker.addTo(markerLayer);
+      });
+
+      // 3. Menambahkan Layer KDE (Raster PNG) menggunakan ImageOverlay
+      // Konversi Extent UTM 50S ke WGS84 [South-West, North-East]
+      const imageBounds = [
+        [-9.17000,115.5500], // Sudut Kiri Bawah (South-West)
+        [-8.10000,117.3750]  // Sudut Kanan Atas (North-East)
+      ];
+
+      const kdeLayerGroup = L.imageOverlay('persebaranlombok.png', imageBounds, {
+        opacity: 0.6,
+        interactive: true
+      }).addTo(map);
+
+      // 4. Tambahkan Widget Layer Control di pojok peta
+      const overlayMaps = {
+        "Titik Destinasi": markerLayer,
+        "Zona Persebaran (KDE)": kdeLayerGroup
+      };
+      L.control.layers(null, overlayMaps, {position: 'topright'}).addTo(map);
+
+      // Konfigurasi peta itinerary tetap seperti semula
+      itineraryMap = L.map('itineraryMap', {scrollWheelZoom:false}).setView([-8.62, 116.28], 9);
+      L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {maxZoom:19, attribution:'&copy; OpenStreetMap contributors'}).addTo(itineraryMap);
+      itineraryMarkerLayer = L.layerGroup().addTo(itineraryMap);
+      routeLayer = L.geoJSON(null, {style:{color:'#e58b5a', weight:5, opacity:.88, lineCap:'round', lineJoin:'round'}}).addTo(itineraryMap);
+    }
+
+    function filteredDestinations() {
+      const search = state.search.toLowerCase().trim();
+      return destinations.filter(d => (state.filter === 'Semua' || d.category === state.filter) && (!search || `${d.name} ${d.category} ${d.district}`.toLowerCase().includes(search)));
+    }
+    function setCategoryFilterButtons() {
+      $$('#categoryFilters .chip').forEach(btn => btn.classList.toggle('active', btn.dataset.category === state.filter));
+    }
+    function renderDestinations() {
+      const rows = filteredDestinations();
+      $('#destCountLabel').textContent = `${rows.length} lokasi ditampilkan`;
+      $('#destinationList').innerHTML = rows.length ? rows.map(d => {
+        const already = state.itinerary.includes(String(d.id));
+        return `<article class="dest-card"><div class="dest-emoji">${d.emoji}</div><div><div class="dest-name">${escapeHTML(d.name)}</div><div class="dest-meta">${escapeHTML(d.category)} · ${escapeHTML(d.district)}<br/>Perkiraan kunjungan ${d.duration} menit</div></div><div class="dest-action"><button class="mini-add" title="${already?'Sudah masuk itinerary':'Tambah ke itinerary'}" aria-label="Tambah ${escapeHTML(d.name)}" onclick="window.addToItinerary('${d.id}')">${already?'✓':'+'}</button><button class="mini-map" onclick="window.focusDestination('${d.id}')">Peta ↗</button></div></article>`;
+      }).join('') : '<div class="empty">Tidak ada destinasi yang cocok dengan pencarian.</div>';
+      $('#statDestinations').textContent = destinations.length;
+      $('#heroCount').textContent = `${destinations.length} places`;
+      $('#statItinerary').textContent = state.itinerary.length;
+    }
+    
+    function addToItinerary(id) {
+      const strId = String(id);
+      if (!destinationById(strId)) return;
+      if (state.itinerary.includes(strId)) { toast('Destinasi sudah ada di itinerary.'); return; }
+      state.itinerary.push(strId); state.routeMetrics = null; if (routeLayer) routeLayer.clearLayers(); persist(); renderDestinations(); renderItinerary(); toast('Destinasi ditambahkan ke itinerary.');
+    }
+    function removeFromItinerary(id) {
+      state.itinerary = state.itinerary.filter(value => value !== String(id)); state.routeMetrics = null; if (routeLayer) routeLayer.clearLayers(); persist(); renderItinerary(); renderDestinations();
+    }
+    function moveItineraryItem(index, delta) {
+      const target = index + delta; if (target < 0 || target >= state.itinerary.length) return;
+      [state.itinerary[index], state.itinerary[target]] = [state.itinerary[target], state.itinerary[index]];
+      state.routeMetrics = null; if (routeLayer) routeLayer.clearLayers(); persist(); renderItinerary();
+    }
+    function renderItinerary() {
+      const list = $('#itineraryList');
+      $('#itineraryCountLabel').textContent = state.itinerary.length ? `${state.itinerary.length} destinasi · urutan bisa diubah` : 'Belum ada destinasi';
+      $('#statItinerary').textContent = state.itinerary.length;
+      list.innerHTML = state.itinerary.length ? state.itinerary.map((id, index) => {
+        const d = destinationById(id); if (!d) return '';
+        return `<div class="itinerary-item"><div class="step-number">${String(index+1).padStart(2,'0')}</div><div><strong>${escapeHTML(d.name)}</strong><small>${escapeHTML(d.category)} · ${escapeHTML(d.district)}<br/>Durasi kunjungan : ${d.duration} menit</small></div><div class="item-tools"><button class="icon-btn" aria-label="Geser ke atas" title="Geser ke atas" onclick="window.moveItineraryItem(${index},-1)">↑</button><button class="icon-btn" aria-label="Geser ke bawah" title="Geser ke bawah" onclick="window.moveItineraryItem(${index},1)">↓</button><button class="icon-btn" aria-label="Hapus destinasi" title="Hapus" onclick="window.removeFromItinerary('${id}')">×</button></div></div>`;
+      }).join('') : '<div class="empty">Belum ada destinasi. Tambahkan dari menu Explore atau buat rekomendasi otomatis.</div>';
+      $('#routeDistance').textContent = state.routeMetrics ? `${state.routeMetrics.distanceKm.toFixed(1)} km` : '—';
+      $('#routeDuration').textContent = state.routeMetrics ? formatDuration(state.routeMetrics.durationMin) : '—';
+      renderItineraryMapMarkers();
+    }
+    function renderItineraryMapMarkers() {
+      if (!itineraryMarkerLayer) return;
+      itineraryMarkerLayer.clearLayers();
+      const start = startPoints[$('#startPoint')?.value || 'airport'];
+      const pts = [start, ...state.itinerary.map(destinationById).filter(Boolean)];
+      pts.forEach((p, index) => {
+        const marker = L.marker([p.lat, p.lon], {title:p.name});
+        marker.bindTooltip(index === 0 ? `Start: ${escapeHTML(p.name)}` : `${index}. ${escapeHTML(p.name)}`);
+        marker.addTo(itineraryMarkerLayer);
+      });
+      if (pts.length > 1) itineraryMap.fitBounds(L.latLngBounds(pts.map(p => [p.lat,p.lon])).pad(.18));
+      else itineraryMap.setView([-8.62,116.28],9);
+    }
+    function formatDuration(mins) {
+      if (!Number.isFinite(mins)) return '—';
+      const h = Math.floor(mins/60), m = Math.round(mins%60);
+      if (h && m) return `${h} j ${m} m`;
+      if (h) return `${h} jam`;
+      return `${m} menit`;
+    }
+    function haversineKm(a,b) {
+      const rad = n => n * Math.PI / 180;
+      const dLat = rad(b.lat-a.lat), dLon = rad(b.lon-a.lon);
+      const t = Math.sin(dLat/2)**2 + Math.cos(rad(a.lat))*Math.cos(rad(b.lat))*Math.sin(dLon/2)**2;
+      return 6371 * 2 * Math.atan2(Math.sqrt(t),Math.sqrt(1-t));
+    }
+    async function fetchTableDurations(current, candidates) {
+      const coords = [current, ...candidates].map(p => `${p.lon},${p.lat}`).join(';');
+      const destinationIndexes = candidates.map((_,i) => i+1).join(';');
+      const url = `https://router.project-osrm.org/table/v1/driving/${coords}?sources=0&destinations=${destinationIndexes}&annotations=duration,distance`;
+      const response = await fetch(url);
+      if (!response.ok) throw new Error('Layanan routing tidak merespons.');
+      const json = await response.json();
+      if (json.code !== 'Ok' || !json.durations?.[0]) throw new Error('Tidak dapat menghitung matriks waktu tempuh.');
+      return {durations:json.durations[0], distances:json.distances?.[0] || []};
+    }
+    async function generateRecommendation() {
+      const start = startPoints[$('#startPoint').value];
+      const category = $('#planCategory').value;
+      const maxMinutes = Number($('#dayHours').value) * 60;
+      let remaining = maxMinutes;
+      let current = start;
+      let candidates = destinations.filter(d => category === 'Semua' || d.category === category).slice();
+      const chosen = [];
+      try {
+        $('#generatePlan').disabled = true; $('#generatePlan').textContent = 'Menyusun...';
+        while (candidates.length && chosen.length < 7) {
+          const matrix = await fetchTableDurations(current, candidates);
+          let bestIndex = -1, bestTravel = Infinity;
+          candidates.forEach((candidate, idx) => {
+            const travelMin = matrix.durations[idx] == null ? Infinity : matrix.durations[idx] / 60;
+            if (travelMin + candidate.duration <= remaining && travelMin < bestTravel) { bestIndex = idx; bestTravel = travelMin; }
+          });
+          if (bestIndex === -1) break;
+          const chosenItem = candidates[bestIndex];
+          chosen.push(String(chosenItem.id));
+          remaining -= bestTravel + chosenItem.duration;
+          current = chosenItem;
+          candidates = candidates.filter(d => d.id !== chosenItem.id);
+        }
+        if (!chosen.length) throw new Error('Tidak ada destinasi yang muat dalam batas waktu. Coba tambah durasi atau ganti kategori.');
+        state.itinerary = chosen; state.routeMetrics = null; if (routeLayer) routeLayer.clearLayers(); persist(); renderItinerary(); renderDestinations();
+        toast(`Rekomendasi dibuat: ${chosen.length} destinasi.`);
+      } catch (error) {
+        const fallback = [];
+        let left = maxMinutes, here = start, pool = destinations.filter(d => category === 'Semua' || d.category === category).slice();
+        while (pool.length && fallback.length < 5) {
+          pool.sort((a,b) => haversineKm(here,a)-haversineKm(here,b));
+          const next = pool[0], estimateDrive = haversineKm(here,next) / 30 * 60 * 1.35;
+          if (estimateDrive + next.duration > left) break;
+          fallback.push(String(next.id)); left -= estimateDrive + next.duration; here = next; pool.shift();
+        }
+        if (fallback.length) {
+          state.itinerary = fallback; state.routeMetrics = null; if (routeLayer) routeLayer.clearLayers(); persist(); renderItinerary(); renderDestinations();
+          toast('Rekomendasi sementara menggunakan estimasi garis lurus.');
+        } else toast(error.message || 'Rekomendasi belum dapat dibuat.');
+      } finally {
+        $('#generatePlan').disabled = false; $('#generatePlan').textContent = 'Buat rekomendasi ↗';
+      }
+    }
+    async function calculateRoute() {
+      const start = startPoints[$('#startPoint').value];
+      const stops = [start, ...state.itinerary.map(destinationById).filter(Boolean)];
+      if (stops.length < 2) { toast('Tambahkan setidaknya satu destinasi ke itinerary.'); return; }
+      try {
+        $('#calculateRoute').disabled = true; $('#calculateRoute').textContent = 'Menghitung rute...';
+        const coords = stops.map(p => `${p.lon},${p.lat}`).join(';');
+        const url = `https://router.project-osrm.org/route/v1/driving/${coords}?overview=full&geometries=geojson&steps=false`;
+        const response = await fetch(url);
+        if (!response.ok) throw new Error('Layanan routing tidak merespons.');
+        const json = await response.json();
+        if (json.code !== 'Ok' || !json.routes?.length) throw new Error('Rute tidak ditemukan.');
+        const route = json.routes[0];
+        routeLayer.clearLayers(); routeLayer.addData({type:'Feature',properties:{},geometry:route.geometry});
+        const latlngs = route.geometry.coordinates.map(([lon,lat]) => [lat,lon]);
+        if (latlngs.length) itineraryMap.fitBounds(L.latLngBounds(latlngs).pad(.12));
+        state.routeMetrics = {distanceKm:route.distance/1000, durationMin:route.duration/60};
+        renderItinerary();
+        toast('Rute berhasil ditampilkan pada peta.');
+      } catch (error) {
+        toast(error.message || 'Gagal menghitung rute.');
+      } finally {
+        $('#calculateRoute').disabled = false; $('#calculateRoute').textContent = 'Hitung & tampilkan rute';
+      }
+    }
+    function clearItinerary() {
+      state.itinerary = []; state.routeMetrics = null; if (routeLayer) routeLayer.clearLayers(); persist(); renderItinerary(); renderDestinations();
+      toast('Itinerary dikosongkan.');
+    }
+   
+    function renderWallet() {
+      const income = state.transactions.filter(t=>t.type==='income').reduce((s,t)=>s+t.amount,0);
+      const expense = state.transactions.filter(t=>t.type==='expense').reduce((s,t)=>s+t.amount,0);
+      $('#walletBalance').textContent = rupiah(income-expense);
+      $('#walletIncome').textContent = rupiah(income);
+      $('#walletExpense').textContent = rupiah(expense);
+      $('#transactionCount').textContent = `${state.transactions.length} transaksi`;
+      const sorted = state.transactions.slice().sort((a,b)=>b.createdAt-a.createdAt);
+      $('#transactionList').innerHTML = sorted.length ? sorted.map(t=>`<div class="transaction"><div class="transaction-left"><div class="transaction-icon">${t.type==='income'?'↙':'↗'}</div><div><strong>${escapeHTML(t.title)}</strong><small>${new Date(t.createdAt).toLocaleDateString('id-ID',{day:'numeric',month:'short',year:'numeric'})}</small></div></div><div class="amount ${t.type==='income'?'positive':'negative'}">${t.type==='income'?'+':'−'}${rupiah(t.amount)}</div></div>`).join('') : '<div class="empty">Belum ada transaksi.</div>';
+    }
+    function renderJournals() {
+      const sorted = state.journals.slice().sort((a,b)=>b.date.localeCompare(a.date));
+      $('#journalCount').textContent = `${sorted.length} catatan`;
+      $('#journalList').innerHTML = sorted.length ? sorted.map(j=>`<article class="journal-card"><span class="journal-date">${new Date(`${j.date}T00:00:00`).toLocaleDateString('id-ID',{day:'numeric',month:'long',year:'numeric'})}</span><button class="journal-delete" aria-label="Hapus jurnal" title="Hapus jurnal" onclick="window.deleteJournal('${j.id}')">×</button><h4>${escapeHTML(j.title)}</h4><p>${escapeHTML(j.body)}</p></article>`).join('') : '<div class="empty" style="grid-column:1/-1">Belum ada cerita tersimpan.</div>';
+    }
+    function deleteJournal(id) {
+      state.journals = state.journals.filter(j=>String(j.id)!==String(id)); persist(); renderJournals(); toast('Catatan jurnal dihapus.');
+    }
+    
+    function bindEvents() {
+      $$('.nav-btn').forEach(button => button.addEventListener('click',()=>showPage(button.dataset.page)));
+      $$('[data-goto]').forEach(button=>button.addEventListener('click',()=>showPage(button.dataset.goto)));$$
+('#categoryFilters .chip').forEach(button=>button.addEventListener('click',()=>{state.filter=button.dataset.category;setCategoryFilterButtons();renderDestinations();}));
+      $('#globalSearch').addEventListener('input',event=>{state.search=event.target.value; if(state.page!=='explore') showPage('explore'); renderDestinations();});
+      $('#generatePlan').addEventListener('click',generateRecommendation);
+      $('#calculateRoute').addEventListener('click',calculateRoute);
+      $('#clearItinerary').addEventListener('click',clearItinerary);
+      $('#exportItinerary').addEventListener('click',()=>toast('Fitur ekspor belum aktif.'));
+      $('#startPoint').addEventListener('change',()=>{state.routeMetrics=null;if(routeLayer)routeLayer.clearLayers();renderItinerary();});
+      $('#transactionForm').addEventListener('submit',event=>{
+        event.preventDefault(); const type=$('#transactionType').value, title=$('#transactionTitle').value.trim(), amount=Number($('#transactionAmount').value);
+        if(!title||!Number.isFinite(amount)||amount<=0){toast('Isi keterangan dan nominal yang valid.');return;}
+        state.transactions.push({id:crypto.randomUUID?crypto.randomUUID():String(Date.now()),type,title,amount,createdAt:Date.now()});persist();renderWallet();event.target.reset();toast('Transaksi tersimpan.');
+      });
+      $('#journalDate').value = new Date().toISOString().slice(0,10);
+      $('#journalForm').addEventListener('submit',event=>{
+        event.preventDefault(); const date=$('#journalDate').value,title=$('#journalTitle').value.trim(),body=$('#journalBody').value.trim();
+        if(!date||!title||!body){toast('Lengkapi tanggal, judul, dan cerita.');return;}
+        state.journals.push({id:crypto.randomUUID?crypto.randomUUID():String(Date.now()),date,title,body});persist();renderJournals();event.target.reset();$('#journalDate').value=new Date().toISOString().slice(0,10);toast('Catatan jurnal tersimpan.');
+      });
+    }
+
+    window.addToItinerary = addToItinerary;
+    window.focusDestination = focusDestination;
+    window.moveItineraryItem = moveItineraryItem;
+    window.removeFromItinerary = removeFromItinerary;
+    window.deleteJournal = deleteJournal;
+
+    document.addEventListener('DOMContentLoaded',()=>{
+      bindEvents(); 
+      loadGeoJSONDestinations(); 
+      renderWallet(); 
+      renderJournals();
+    });
+  </script>
+</body>
+</html>
